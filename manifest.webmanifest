@@ -1,0 +1,13 @@
+{
+  "name": "Points",
+  "short_name": "Points",
+  "description": "Family points tracker backed by Google Tasks",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f4fb",
+  "theme_color": "#5b4bdb",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

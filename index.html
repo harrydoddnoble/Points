@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Points</title>
+  <meta name="description" content="Family points tracker backed by Google Tasks, so points can be added by voice through Gemini.">
+  <meta name="theme-color" content="#5b4bdb">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Points</h1>
+      <p class="subtle" id="today-label"></p>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="refresh-btn" title="Refresh" aria-label="Refresh">⟳</button>
+      <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="banner" class="banner" hidden></div>
+
+    <section id="setup" class="card" hidden>
+      <h2>Welcome</h2>
+      <p>Add your children's names in settings to get started. You can try it out in demo mode straight away, then connect Google Tasks so you can add points by voice.</p>
+      <button class="primary" id="setup-open-settings">Open settings</button>
+    </section>
+
+    <section id="scoreboard" class="scoreboard" aria-label="Today's scores"></section>
+
+    <section class="card" id="add-card" hidden>
+      <h2>Add or remove points</h2>
+      <form id="add-form" class="add-form">
+        <label>Child
+          <select id="add-child" required></select>
+        </label>
+        <label>Points
+          <input id="add-amount" type="number" min="1" max="100" value="1" required inputmode="numeric">
+        </label>
+        <label class="wide">Reason
+          <input id="add-reason" type="text" placeholder="e.g. Tidied bedroom" autocomplete="off">
+        </label>
+        <div class="add-buttons wide">
+          <button type="submit" class="plus" data-sign="1">+ Add</button>
+          <button type="submit" class="minus" data-sign="-1">− Remove</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" id="log-card" hidden>
+      <h2>Today</h2>
+      <ul id="today-log" class="log"></ul>
+      <p id="today-empty" class="subtle" hidden>Nothing logged yet today.</p>
+    </section>
+
+    <section class="card" id="unparsed-card" hidden>
+      <h2>Couldn't understand</h2>
+      <p class="subtle">These are in your Points list but didn't look like a points entry (a child's name plus something like “plus 2” or “minus 1”). Edit them in Google Tasks or delete them here.</p>
+      <ul id="unparsed-log" class="log"></ul>
+    </section>
+
+    <section class="card" id="history-card" hidden>
+      <h2>Earlier days</h2>
+      <div id="history"></div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <h2>Settings</h2>
+
+      <label>Children (comma separated)
+        <input id="set-children" type="text" placeholder="Sam, Ella" autocomplete="off">
+      </label>
+
+      <fieldset>
+        <legend>Where points are stored</legend>
+        <label class="radio"><input type="radio" name="mode" value="demo"> Demo, on this device only</label>
+        <label class="radio"><input type="radio" name="mode" value="google"> Google Tasks, which is needed for voice</label>
+      </fieldset>
+
+      <div id="google-settings">
+        <label>Google OAuth client ID
+          <input id="set-client-id" type="text" placeholder="1234-abc.apps.googleusercontent.com" autocomplete="off">
+        </label>
+        <p class="subtle small">See the README for the five-minute setup. The ID is stored in this browser only.</p>
+        <div class="row">
+          <button type="button" id="connect-btn">Connect Google</button>
+          <button type="button" id="signout-btn" class="ghost">Sign out</button>
+        </div>
+        <label>Task list
+          <select id="set-list"><option value="">Connect first…</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="set-tickoff"> Tick entries off in Google Tasks once counted</label>
+        <label class="check"><input type="checkbox" id="set-scoretask"> Keep a “Today's score” task at the top of the list</label>
+      </div>
+
+      <div class="row end">
+        <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+        <button value="save" class="primary" id="settings-save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <script src="parser.js"></script>
+  <script src="store.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
