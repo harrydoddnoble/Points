@@ -59,9 +59,22 @@
       <p id="today-empty" class="subtle" hidden>Nothing logged yet today.</p>
     </section>
 
+    <section class="card" id="summary-card" hidden>
+      <h2>How's everyone doing?</h2>
+      <div class="row summary-controls">
+        <select id="summary-period" aria-label="Period">
+          <option value="today">Today</option>
+          <option value="week" selected>Last 7 days</option>
+          <option value="month">Last 30 days</option>
+        </select>
+        <button class="primary" id="summary-btn">Write summary</button>
+      </div>
+      <div id="summary-output" class="summary" aria-live="polite"></div>
+    </section>
+
     <section class="card" id="unparsed-card" hidden>
       <h2>Couldn't understand</h2>
-      <p class="subtle">These are in your Points list but didn't look like a points entry (a child's name plus something like “plus 2” or “minus 1”). Edit them in Google Tasks or delete them here.</p>
+      <p class="subtle">These are in your Points list but couldn't be read as a points entry (a child's name plus something like “plus 2” or “minus 1”, or with the AI helper on, a note about something a child did). Edit them in Google Tasks or delete them here.</p>
       <ul id="unparsed-log" class="log"></ul>
     </section>
 
@@ -101,6 +114,28 @@
         <label class="check"><input type="checkbox" id="set-scoretask"> Keep a “Today's score” task at the top of the list</label>
       </div>
 
+      <fieldset>
+        <legend>AI helper (optional)</legend>
+        <p class="subtle small">Reads entries the built-in rules can't (like “Sam was really kind to his sister”) and writes summaries. It uses your own API key, which is stored only in this browser.</p>
+        <label>Provider
+          <select id="set-ai-provider">
+            <option value="off">Off</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="gemini">Gemini (Google)</option>
+          </select>
+        </label>
+        <div id="ai-settings" class="stack">
+          <label>API key
+            <input id="set-ai-key" type="password" autocomplete="off" spellcheck="false">
+          </label>
+          <label>Model
+            <input id="set-ai-model" type="text" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="check"><input type="checkbox" id="set-ai-hide"> Hide the children's names from the AI (sends “[C1]”, “[C2]” instead)</label>
+          <p class="subtle small" id="ai-privacy"></p>
+        </div>
+      </fieldset>
+
       <div class="row end">
         <button value="cancel" class="ghost" formnovalidate>Cancel</button>
         <button value="save" class="primary" id="settings-save">Save</button>
@@ -111,6 +146,7 @@
   <script src="https://accounts.google.com/gsi/client" async></script>
   <script src="parser.js"></script>
   <script src="store.js"></script>
+  <script src="ai.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

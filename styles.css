@@ -76,7 +76,7 @@ button.minus { background: var(--neg-bg); color: var(--neg); border-color: trans
 .add-form { display: grid; grid-template-columns: 1fr 110px; gap: 12px; }
 .add-form .wide { grid-column: 1 / -1; }
 label { display: grid; gap: 4px; font-size: 0.9rem; color: var(--muted); }
-input[type=text], input[type=number], select {
+input[type=text], input[type=number], input[type=password], select {
   font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
   border-radius: 10px; padding: 9px 10px; width: 100%;
 }
@@ -112,3 +112,17 @@ label.radio, label.check { display: flex; align-items: center; gap: 8px; color: 
 #google-settings { display: grid; gap: 12px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; }
 .row.end { justify-content: flex-end; }
+
+.stack { display: grid; gap: 10px; }
+.badge {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; color: var(--accent);
+  border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; align-self: center;
+}
+.summary-controls select { width: auto; flex: 1; }
+.summary { display: grid; gap: 14px; margin-top: 14px; }
+.summary:empty { display: none; }
+.summary h3 { margin: 0 0 2px; font-size: 1rem; }
+.summary p { margin: 0; }
+.summary ul { margin: 4px 0 0; padding-left: 20px; }
+.summary .label { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.summary .kid-summary { border-top: 1px solid var(--border); padding-top: 12px; }

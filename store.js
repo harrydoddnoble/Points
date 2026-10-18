@@ -2,7 +2,9 @@
 //   load()               -> [{ id, title, notes, loggedAt: Date, completed }]
 //   add(title)           -> creates an entry
 //   remove(id)           -> deletes an entry
-//   markLogged(task)     -> records when an entry was first seen (and ticks it off)
+//   markLogged(task, tickOff, extraLine)
+//                        -> records when an entry was first seen (plus any AI reading)
+//                           and optionally ticks it off
 //   setScoreTask(title)  -> keeps a single "today's score" task up to date
 (function (root) {
   const LOGGED_RE = /Points app: logged (\d{4}-\d\d-\d\dT[\d:.]+Z)/;
@@ -16,6 +18,11 @@
   function loggedNote(date, existing) {
     const line = `Points app: logged ${date.toISOString()}`;
     return existing ? `${line}\n${existing}` : line;
+  }
+
+  function notesFor(task, extraLine) {
+    const withExtra = [extraLine, task.notes].filter(Boolean).join('\n');
+    return task.stamped ? withExtra : loggedNote(task.loggedAt, withExtra);
   }
 
   // ---------- Demo backend (this browser only) ----------
@@ -39,10 +46,10 @@
       this._write(tasks);
     }
     async remove(id) { this._write(this._read().filter((t) => t.id !== id)); }
-    async markLogged(task, tickOff) {
+    async markLogged(task, tickOff, extraLine) {
       const tasks = this._read();
       const t = tasks.find((x) => x.id === task.id);
-      if (t) { t.notes = loggedNote(new Date(), t.notes); if (tickOff) t.completed = true; }
+      if (t) { t.notes = notesFor(task, extraLine); if (tickOff) t.completed = true; }
       this._write(tasks);
     }
     async setScoreTask() { /* nothing to sync to in demo mode */ }
@@ -121,8 +128,8 @@
       await this._fetch(`${this._list()}/${encodeURIComponent(id)}`, { method: 'DELETE' });
     }
 
-    async markLogged(task, tickOff) {
-      const body = { notes: loggedNote(task.loggedAt, task.notes) };
+    async markLogged(task, tickOff, extraLine) {
+      const body = { notes: notesFor(task, extraLine) };
       if (tickOff) body.status = 'completed';
       await this._fetch(`${this._list()}/${encodeURIComponent(task.id)}`, { method: 'PATCH', body: JSON.stringify(body) });
     }

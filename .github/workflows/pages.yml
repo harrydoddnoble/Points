@@ -37,7 +37,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp index.html app.js parser.js store.js styles.css manifest.webmanifest icon.svg _site/
+          cp index.html app.js ai.js parser.js store.js styles.css manifest.webmanifest icon.svg _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
       - id: deployment

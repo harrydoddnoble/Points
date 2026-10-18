@@ -1,21 +1,29 @@
 (function () {
   const { parseEntry, formatEntry } = PointsParser;
   const { DemoStore, GoogleTasksStore } = PointsStore;
+  const { PROVIDERS, classify, summarise, aiNote, aiFromNotes } = PointsAI;
 
   const SCOPE = 'https://www.googleapis.com/auth/tasks';
   const CREATE_LIST = '__create__';
   const $ = (id) => document.getElementById(id);
 
   // ---------- Settings ----------
-  const defaults = { children: [], mode: 'demo', clientId: '', listId: '', tickOff: true, scoreTask: true };
+  const defaults = {
+    children: [], mode: 'demo', clientId: '', listId: '', tickOff: true, scoreTask: true,
+    ai: { provider: 'off', apiKey: '', model: '', hideNames: true },
+  };
 
   function loadSettings() {
-    try { return { ...defaults, ...JSON.parse(localStorage.getItem('points.settings')) }; } catch { return { ...defaults }; }
+    try {
+      const saved = JSON.parse(localStorage.getItem('points.settings')) || {};
+      return { ...defaults, ...saved, ai: { ...defaults.ai, ...(saved.ai || {}) } };
+    } catch { return { ...defaults, ai: { ...defaults.ai } }; }
   }
   function saveSettings() {
     try { localStorage.setItem('points.settings', JSON.stringify(settings)); } catch { /* storage blocked */ }
   }
   let settings = loadSettings();
+  const aiEnabled = () => settings.ai.provider !== 'off' && !!settings.ai.apiKey;
 
   // ---------- Google sign-in ----------
   let token = null;
@@ -98,6 +106,7 @@
   // ---------- State ----------
   let tasks = [];
   let busy = false;
+  let aiPausedUntil = 0; // after an AI error, don't retry on every refresh
 
   function showBanner(msg, action) {
     const b = $('banner');
@@ -137,20 +146,28 @@
       tasks = await store.load();
       // Stamp new entries with the time we first saw them, since Google Tasks keeps no
       // creation time, and optionally tick them off so the list only shows the score.
+      // Anything the rules can't read is handed to the AI helper, if it's switched on.
+      const forAi = [];
       for (const t of tasks) {
-        if (t.isScore || t.stamped) continue;
-        if (!parseEntry(t.title, settings.children)) continue;
-        await store.markLogged(t, settings.tickOff);
-        t.stamped = true;
-        if (settings.tickOff) t.completed = true;
+        if (t.isScore || !t.title.trim()) continue;
+        if (parseEntry(t.title, settings.children)) {
+          if (t.stamped) continue;
+          await store.markLogged(t, settings.tickOff);
+          t.stamped = true;
+          if (settings.tickOff) t.completed = true;
+        } else if (aiFromNotes(t.notes, settings.children) === undefined) {
+          forAi.push(t);
+        }
       }
+      let aiProblem = '';
+      if (forAi.length && aiEnabled() && Date.now() > aiPausedUntil) aiProblem = await readWithAi(store, forAi);
       if (settings.mode === 'google' && settings.scoreTask) {
         const scoreTasks = tasks.filter((t) => t.isScore);
         const title = scoreTitle(computeTotals());
         await store.setScoreTask(title, scoreTasks[0]);
         for (const extra of scoreTasks.slice(1)) await store.remove(extra.id);
       }
-      showBanner('');
+      showBanner(aiProblem);
     } catch (e) {
       if (e.code === 'auth') reconnectBanner();
       else showBanner(e.message);
@@ -161,13 +178,38 @@
     }
   }
 
+  // Returns an error message to show, or '' if all went well.
+  async function readWithAi(store, pending) {
+    try {
+      for (let i = 0; i < pending.length; i += 25) {
+        const batch = pending.slice(i, i + 25);
+        const results = await classify(settings.ai, settings.children, batch.map((t) => ({ id: t.id, title: t.title })));
+        for (const t of batch) {
+          if (!results.has(t.id)) continue;
+          const result = results.get(t.id);
+          const line = aiNote(result);
+          await store.markLogged(t, settings.tickOff && !!result, line);
+          t.notes = `${line}\n${t.notes || ''}`;
+          t.stamped = true;
+          if (result && settings.tickOff) t.completed = true;
+        }
+      }
+      return '';
+    } catch (e) {
+      if (e.code === 'auth') throw e; // Google sign-in, handled by refresh()
+      aiPausedUntil = Date.now() + 10 * 60_000;
+      return `AI helper couldn't read new entries (${e.message}). It will try again in 10 minutes.`;
+    }
+  }
+
   function entries() {
     const out = [];
     const unparsed = [];
     for (const t of tasks) {
       if (t.isScore) continue;
-      const p = parseEntry(t.title, settings.children);
-      if (p) out.push({ ...p, id: t.id, at: t.loggedAt, title: t.title });
+      const rules = parseEntry(t.title, settings.children);
+      const p = rules || aiFromNotes(t.notes, settings.children);
+      if (p) out.push({ ...p, id: t.id, at: t.loggedAt, title: t.title, ai: !rules });
       else if (t.title.trim()) unparsed.push(t);
     }
     out.sort((a, b) => b.at - a.at);
@@ -211,7 +253,8 @@
       el('span', { class: `delta ${e.delta >= 0 ? 'pos' : 'neg'}` }, signed(e.delta)),
       el('span', { class: 'entry-main' },
         el('strong', {}, e.child),
-        e.reason ? el('span', { class: 'reason' }, e.reason) : null),
+        e.reason ? el('span', { class: 'reason' }, e.reason) : null,
+        e.ai ? el('span', { class: 'badge', title: `Read by the AI helper from “${e.title}”. Delete it if it got this wrong.` }, 'AI') : null),
       showTime ? el('span', { class: 'time subtle' }, fmtTime.format(e.at)) : null,
       el('button', { class: 'icon-btn small', title: 'Delete', 'aria-label': `Delete ${e.title}`, onclick: () => removeEntry(e.id, e.title) }, '✕'));
   }
@@ -250,6 +293,9 @@
     $('today-log').replaceChildren(...todays.map((e) => entryRow(e)));
     $('today-empty').hidden = todays.length > 0;
 
+    $('summary-card').hidden = !(hasKids && aiEnabled());
+    if (!$('summary-output').hasChildNodes()) renderSummary(loadSummary());
+
     $('unparsed-card').hidden = unparsed.length === 0;
     $('unparsed-log').replaceChildren(...unparsed.map((t) => el('li', { class: 'entry' },
       el('span', { class: 'entry-main' }, t.title),
@@ -271,6 +317,55 @@
         el('ul', { class: 'log' }, ...items.map((e) => entryRow(e))));
     }));
   }
+
+  // ---------- AI summary ----------
+  const PERIODS = { today: 'today', week: 'the last 7 days', month: 'the last 30 days' };
+
+  function loadSummary() {
+    try { return JSON.parse(localStorage.getItem('points.summary')); } catch { return null; }
+  }
+
+  function renderSummary(saved) {
+    const out = $('summary-output');
+    if (!saved || !saved.data) { out.replaceChildren(); return; }
+    const { data } = saved;
+    const list = (label, items) => (items && items.length
+      ? [el('div', { class: 'label' }, label), el('ul', {}, ...items.map((i) => el('li', {}, i)))]
+      : []);
+    out.replaceChildren(
+      el('p', { class: 'subtle small' }, `Covering ${PERIODS[saved.period] || saved.period}, written ${fmtDay.format(new Date(saved.at))} at ${fmtTime.format(new Date(saved.at))}.`),
+      el('p', {}, data.overview),
+      ...data.children.map((c) => el('div', { class: 'kid-summary' },
+        el('h3', {}, c.child),
+        el('p', {}, c.headline),
+        ...list('Going well', c.goingWell),
+        ...list('To work on', c.toWorkOn),
+        c.tryThis ? el('div', { class: 'label' }, 'Something to try') : null,
+        c.tryThis ? el('p', {}, c.tryThis) : null)));
+  }
+
+  $('summary-btn').addEventListener('click', async () => {
+    const btn = $('summary-btn');
+    const period = $('summary-period').value;
+    const now = new Date();
+    const since = period === 'today'
+      ? new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      : new Date(now - (period === 'week' ? 7 : 30) * 86_400_000);
+    const list = entries().list.filter((e) => e.at >= since);
+    btn.disabled = true;
+    btn.textContent = 'Writing…';
+    try {
+      const data = await summarise(settings.ai, settings.children, list, PERIODS[period]);
+      const saved = { period, at: Date.now(), data };
+      try { localStorage.setItem('points.summary', JSON.stringify(saved)); } catch { /* ignore */ }
+      renderSummary(saved);
+    } catch (e) {
+      $('summary-output').replaceChildren(el('p', { class: 'subtle' }, `Couldn't write a summary: ${e.message}`));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Write summary';
+    }
+  });
 
   // ---------- Actions ----------
   async function addEntry(child, delta, reason) {
@@ -316,6 +411,23 @@
     $('google-settings').hidden = mode !== 'google';
   }
 
+  const AI_PRIVACY = {
+    claude: 'Get a key at console.anthropic.com. Anthropic doesn\'t train its models on API data by default. It\'s worth setting a monthly spend limit in the Console.',
+    gemini: 'Get a key at aistudio.google.com. On the free tier, Google may use what you send to improve its products and people may review it, which is worth weighing up with children\'s information. Hiding names helps, and paid-tier data isn\'t used that way. Check Google\'s terms for your country.',
+  };
+
+  function syncAiUI() {
+    const provider = $('set-ai-provider').value;
+    $('ai-settings').hidden = provider === 'off';
+    if (provider === 'off') return;
+    $('set-ai-model').placeholder = PROVIDERS[provider].defaultModel;
+    $('ai-privacy').textContent = AI_PRIVACY[provider];
+  }
+  $('set-ai-provider').addEventListener('change', () => {
+    $('set-ai-model').value = '';
+    syncAiUI();
+  });
+
   async function populateLists(selected) {
     const sel = $('set-list');
     try {
@@ -336,7 +448,12 @@
     $('set-client-id').value = settings.clientId;
     $('set-tickoff').checked = settings.tickOff;
     $('set-scoretask').checked = settings.scoreTask;
+    $('set-ai-provider').value = settings.ai.provider;
+    $('set-ai-key').value = settings.ai.apiKey;
+    $('set-ai-model').value = settings.ai.model;
+    $('set-ai-hide').checked = settings.ai.hideNames;
     syncModeUI();
+    syncAiUI();
     if (tokenValid()) populateLists(settings.listId);
     dialog.showModal();
   }
@@ -364,6 +481,14 @@
     settings.clientId = $('set-client-id').value.trim();
     settings.tickOff = $('set-tickoff').checked;
     settings.scoreTask = $('set-scoretask').checked;
+    const ai = {
+      provider: $('set-ai-provider').value,
+      apiKey: $('set-ai-key').value.trim(),
+      model: $('set-ai-model').value.trim(),
+      hideNames: $('set-ai-hide').checked,
+    };
+    if (ai.provider !== settings.ai.provider || ai.apiKey !== settings.ai.apiKey) aiPausedUntil = 0;
+    settings.ai = ai;
     let listId = $('set-list').value;
     if (settings.mode === 'google' && listId === CREATE_LIST) {
       try { listId = (await GoogleTasksStore.createTaskList(getToken, 'Points')).id; }

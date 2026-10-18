@@ -28,6 +28,27 @@ Anything in the Points list that doesn't make sense to the app shows up under **
 
 Everyday tasks such as "Take Sam to football" are deliberately ignored (no number and no "points"), which matters if you ever point the app at a list you also use for other things.
 
+## AI helper (optional)
+
+If you switch on the AI helper in settings, two extra things happen.
+
+**It reads entries the rules can't.** Anything in the Points list that the built-in rules don't understand gets sent to the AI, which decides which child it's about, whether it's a plus or a minus, and how many points (1 unless you said a number). So you can just say *"Sam was really kind to his sister"* or *"Ella helped carry all the shopping in"*. Entries read this way have a small **AI** badge, so you can spot them and delete any it got wrong. Each entry is only sent once, because the answer is saved in the task's notes. Things that clearly aren't about the children (like "Buy milk") stay under "Couldn't understand".
+
+The rules still handle anything they *can* read, like "Sam +2 tidying". That keeps things predictable and means most entries never go to the AI at all. The catch is that the AI doesn't double-check the rules: if the rules confidently misread something, the AI won't catch it.
+
+**It writes summaries.** The "How's everyone doing?" card turns today, the last 7 days or the last 30 days into a short write-up for each child. Each one covers what's going well, what to work on and one small thing to try. The instructions ask it to be balanced, to describe behaviour rather than labelling the child, not to compare the children, and to say so when there isn't much to go on. It's still an AI reading a handful of short notes, though, so it's a prompt for your own thinking rather than an assessment.
+
+### Choosing a provider
+
+You bring your own API key, and it's stored only in that browser. You can pick either:
+
+- **Claude (Anthropic).** Get a key at <https://console.anthropic.com/>. It's pay-as-you-go, and at family scale (a few entries a day plus the odd summary) it should cost pennies a month, though it's worth setting a monthly spend limit in the Console. Anthropic doesn't use API data to train its models by default. The default model is `claude-opus-5-5`.
+- **Gemini (Google).** Get a key at <https://aistudio.google.com/>. There's a free tier, but on it Google may use what you send to improve its products, and people may review it. The paid tier doesn't do that. Google's terms have in the past treated UK and EEA users differently here, so it's worth checking the current terms. The default model is `gemini-3.8-flash`.
+
+Either way, **"Hide the children's names"** is on by default. Each name is replaced with a code like `[C1]` before anything leaves the device, and swapped back when the answer arrives. Other personal details in what you dictate (a school name, say) are still sent as they are.
+
+Because the key sits in the browser, anyone who can use that browser could in principle find it, so only turn this on for a device you trust. You can change the model in settings if a newer one comes out.
+
 ## Setting it up
 
 ### 1. Host the app
@@ -70,5 +91,6 @@ Make sure the watch and phone are signed into the same Google account you connec
 
 - `parser.js` turns task titles into `{ child, delta, reason }`.
 - `store.js` holds the Google Tasks and demo storage.
+- `ai.js` holds the optional AI helper (Claude or Gemini): reading free-text entries, writing summaries and hiding names.
 - `app.js` handles the interface and sign-in.
 - `npm test` runs the parser and storage tests (Node 20+).
