@@ -106,6 +106,27 @@
   // ---------- State ----------
   let tasks = [];
   let busy = false;
+  let refreshAgain = false; // a refresh was asked for while one was already running
+  let lastSynced = null;
+
+  // Keep the last good copy of the list so the scores still show when Google's
+  // hour-long sign-in has run out, instead of dropping to zero.
+  function saveCache() {
+    try {
+      localStorage.setItem('points.cache', JSON.stringify({
+        mode: settings.mode, listId: settings.listId, at: lastSynced, tasks,
+      }));
+    } catch { /* storage blocked or full */ }
+  }
+
+  function loadCache() {
+    try {
+      const c = JSON.parse(localStorage.getItem('points.cache'));
+      if (!c || c.mode !== settings.mode || c.listId !== settings.listId) return;
+      tasks = c.tasks.map((t) => ({ ...t, loggedAt: new Date(t.loggedAt) }));
+      lastSynced = c.at;
+    } catch { /* ignore a damaged cache */ }
+  }
   let aiPausedUntil = 0; // after an AI error, don't retry on every refresh
 
   function showBanner(msg, action) {
@@ -120,18 +141,20 @@
     }
   }
 
+  async function reconnect() {
+    try { await connectGoogle(settings.clientId); showBanner(''); refresh(); }
+    catch (e) { showBanner(e.message); }
+  }
+
   function reconnectBanner() {
-    showBanner('Google sign-in has expired.', {
-      label: 'Reconnect',
-      run: async () => {
-        try { await connectGoogle(settings.clientId); showBanner(''); refresh(); }
-        catch (e) { showBanner(e.message); }
-      },
-    });
+    const asOf = lastSynced
+      ? ` Showing points as of ${fmtTime.format(new Date(lastSynced))}${dayKey(new Date(lastSynced)) === dayKey(new Date()) ? '' : ` on ${fmtDay.format(new Date(lastSynced))}`}, so anything added since won't show until you reconnect.`
+      : '';
+    showBanner(`Google sign-in has expired.${asOf}`, { label: 'Reconnect', run: reconnect });
   }
 
   async function refresh() {
-    if (busy) return;
+    if (busy) { refreshAgain = true; return; }
     if (!settings.children.length) { render(); return; }
     if (settings.mode === 'google' && !settings.listId) {
       showBanner('Pick a Google Tasks list in settings.');
@@ -167,6 +190,8 @@
         await store.setScoreTask(title, scoreTasks[0]);
         for (const extra of scoreTasks.slice(1)) await store.remove(extra.id);
       }
+      lastSynced = Date.now();
+      saveCache();
       showBanner(aiProblem);
     } catch (e) {
       if (e.code === 'auth') reconnectBanner();
@@ -175,6 +200,7 @@
       busy = false;
       $('refresh-btn').classList.remove('spin');
       render();
+      if (refreshAgain) { refreshAgain = false; refresh(); }
     }
   }
 
@@ -253,7 +279,7 @@
       el('span', { class: `delta ${e.delta >= 0 ? 'pos' : 'neg'}` }, signed(e.delta)),
       el('span', { class: 'entry-main' },
         el('strong', {}, e.child),
-        e.reason ? el('span', { class: 'reason' }, e.reason) : null,
+        el('span', { class: e.reason ? 'reason' : 'reason none' }, e.reason || 'No reason given'),
         e.ai ? el('span', { class: 'badge', title: `Read by the AI helper from “${e.title}”. Delete it if it got this wrong.` }, 'AI') : null),
       showTime ? el('span', { class: 'time subtle' }, fmtTime.format(e.at)) : null,
       el('button', { class: 'icon-btn small', title: 'Delete', 'aria-label': `Delete ${e.title}`, onclick: () => removeEntry(e.id, e.title) }, '✕'));
@@ -501,12 +527,17 @@
 
   $('settings-btn').addEventListener('click', openSettings);
   $('setup-open-settings').addEventListener('click', openSettings);
-  $('refresh-btn').addEventListener('click', refresh);
+  // A tap on refresh counts as a click, so the browser lets us reopen Google sign-in.
+  $('refresh-btn').addEventListener('click', () => {
+    if (settings.mode === 'google' && settings.listId && !tokenValid()) reconnect();
+    else refresh();
+  });
 
   // Pick up entries added by voice whenever the app comes back into view, and every minute.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
   setInterval(() => { if (!document.hidden) refresh(); }, 60_000);
 
+  loadCache();
   render();
   refresh();
 })();
